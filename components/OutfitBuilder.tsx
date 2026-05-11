@@ -1,16 +1,17 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Save, RotateCcw, Trash2, Plus, X, GripVertical } from "lucide-react";
-import {
-  ClothingItem,
-  Outfit,
-  OutfitItem,
-  getAllClothing,
-  getAllOutfits,
-  saveOutfit,
-  deleteOutfit,
-} from "@/lib/db";
+import { Save, RotateCcw, Trash2, Plus, X, GripVertical, Eye } from "lucide-react";
+import type { ClothingItem, Outfit, OutfitItem } from "@/lib/db";
+import { saveOutfit, removeOutfit } from "@/app/actions/outfits";
+import MannequinView from "./MannequinView";
+
+async function fetchClothing(): Promise<ClothingItem[]> {
+  return fetch("/api/clothing").then((r) => r.json());
+}
+async function fetchOutfits(): Promise<Outfit[]> {
+  return fetch("/api/outfits").then((r) => r.json());
+}
 
 interface CanvasItem extends OutfitItem {
   clothingItem: ClothingItem;
@@ -35,11 +36,12 @@ export default function OutfitBuilder() {
   const [showClothingPanel, setShowClothingPanel] = useState(false);
   const [editingOutfitId, setEditingOutfitId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [showMannequin, setShowMannequin] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
 
   useEffect(() => {
-    Promise.all([getAllClothing(), getAllOutfits()]).then(([c, o]) => {
+    Promise.all([fetchClothing(), fetchOutfits()]).then(([c, o]) => {
       setClothing(c);
       setOutfits(o);
     });
@@ -140,14 +142,13 @@ export default function OutfitBuilder() {
       createdAt: Date.now(),
     };
     await saveOutfit(outfit);
-    const updated = await getAllOutfits();
-    setOutfits(updated);
+    setOutfits(await fetchOutfits());
     setEditingOutfitId(outfit.id);
     setSaving(false);
   };
 
   const loadOutfit = async (outfit: Outfit) => {
-    const all = await getAllClothing();
+    const all = await fetchClothing();
     const clothingMap = Object.fromEntries(all.map((c) => [c.id, c]));
     const items: CanvasItem[] = outfit.items
       .map((item) => {
@@ -163,8 +164,8 @@ export default function OutfitBuilder() {
   };
 
   const handleDeleteOutfit = async (id: string) => {
-    await deleteOutfit(id);
-    setOutfits(await getAllOutfits());
+    await removeOutfit(id);
+    setOutfits(await fetchOutfits());
     if (editingOutfitId === id) clearCanvas();
   };
 
@@ -172,12 +173,12 @@ export default function OutfitBuilder() {
     <div className="flex gap-4 h-[calc(100vh-140px)] min-h-[500px]">
       {/* Saved outfits sidebar */}
       <div className="w-44 flex-shrink-0 flex flex-col gap-2">
-        <p className="text-xs font-semibold text-stone-500 uppercase tracking-wide px-1">
+        <p className="text-[10px] font-medium text-[#9B9390] uppercase tracking-widest px-1">
           Mis outfits
         </p>
         <button
           onClick={clearCanvas}
-          className="flex items-center gap-2 px-3 py-2 rounded-xl border-2 border-dashed border-stone-200 text-xs text-stone-400 hover:border-stone-400 hover:text-stone-600 transition-colors"
+          className="flex items-center gap-2 px-3 py-2 border-2 border-dashed border-[#C8C0B0] text-xs text-[#9B9390] hover:border-[#111] hover:text-[#111] transition-colors"
         >
           <Plus size={13} />
           Nuevo outfit
@@ -186,18 +187,18 @@ export default function OutfitBuilder() {
           {outfits.map((o) => (
             <div
               key={o.id}
-              className={`group relative rounded-xl overflow-hidden cursor-pointer border-2 transition-all ${
+              className={`group relative overflow-hidden cursor-pointer border-2 transition-all ${
                 editingOutfitId === o.id
-                  ? "border-stone-800"
-                  : "border-transparent hover:border-stone-300"
+                  ? "border-[#111]"
+                  : "border-transparent hover:border-[#C8C0B0]"
               }`}
               onClick={() => loadOutfit(o)}
             >
-              <div className="bg-stone-50 p-2">
-                <p className="text-xs font-medium text-stone-700 truncate pr-5">
+              <div className="bg-white p-2">
+                <p className="text-xs font-medium text-[#111] truncate pr-5">
                   {o.name}
                 </p>
-                <p className="text-xs text-stone-400">
+                <p className="text-xs text-[#9B9390]">
                   {o.items.length} prenda{o.items.length !== 1 ? "s" : ""}
                 </p>
               </div>
@@ -206,7 +207,7 @@ export default function OutfitBuilder() {
                   e.stopPropagation();
                   handleDeleteOutfit(o.id);
                 }}
-                className="absolute top-1.5 right-1.5 p-1 rounded-lg bg-white/90 opacity-0 group-hover:opacity-100 transition-opacity text-stone-400 hover:text-red-500"
+                className="absolute top-1.5 right-1.5 p-1 bg-white/90 opacity-0 group-hover:opacity-100 transition-opacity text-[#9B9390] hover:text-red-500"
               >
                 <Trash2 size={11} />
               </button>
@@ -223,18 +224,27 @@ export default function OutfitBuilder() {
             type="text"
             value={outfitName}
             onChange={(e) => setOutfitName(e.target.value)}
-            className="flex-1 border border-stone-200 rounded-xl px-3 py-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-stone-300"
+            className="flex-1 border border-[#D4CEC6] px-3 py-2 text-sm font-medium focus:outline-none focus:border-[#111] bg-white"
           />
           <button
             onClick={() => setShowClothingPanel(true)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-stone-100 text-stone-700 rounded-xl text-sm hover:bg-stone-200 transition-colors"
+            className="flex items-center gap-1.5 px-3 py-2 bg-white border border-[#D4CEC6] text-[#6B6560] text-sm hover:border-[#111] hover:text-[#111] transition-colors"
           >
             <Plus size={14} />
             Prenda
           </button>
           <button
+            onClick={() => setShowMannequin(true)}
+            disabled={canvasItems.length === 0}
+            className="flex items-center gap-1.5 px-3 py-2 bg-white border border-[#D4CEC6] text-[#6B6560] text-sm hover:border-[#111] hover:text-[#111] disabled:opacity-40 transition-colors"
+            title="Ver en maniquí"
+          >
+            <Eye size={14} />
+            Ver
+          </button>
+          <button
             onClick={clearCanvas}
-            className="p-2 text-stone-400 hover:text-stone-700 rounded-xl hover:bg-stone-100 transition-colors"
+            className="p-2 text-[#9B9390] hover:text-[#111] transition-colors"
             title="Limpiar canvas"
           >
             <RotateCcw size={15} />
@@ -242,7 +252,7 @@ export default function OutfitBuilder() {
           <button
             onClick={handleSaveOutfit}
             disabled={canvasItems.length === 0 || saving}
-            className="flex items-center gap-1.5 px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-medium hover:bg-stone-700 disabled:opacity-40 transition-colors"
+            className="flex items-center gap-1.5 px-4 py-2 bg-[#111] text-white text-sm font-medium hover:bg-[#333] disabled:opacity-40 transition-colors"
           >
             <Save size={14} />
             {saving ? "Guardando..." : "Guardar"}
@@ -252,13 +262,13 @@ export default function OutfitBuilder() {
         {/* Canvas */}
         <div
           ref={canvasRef}
-          className="flex-1 relative bg-white rounded-2xl border-2 border-dashed border-stone-200 overflow-hidden"
+          className="flex-1 relative bg-white border-2 border-dashed border-[#C8C0B0] overflow-hidden"
           onClick={() => setSelectedId(null)}
         >
           {canvasItems.length === 0 && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-stone-300 pointer-events-none">
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-[#C8C0B0] pointer-events-none">
               <div className="text-5xl mb-3">👗</div>
-              <p className="text-sm">Añadí prendas para armar tu outfit</p>
+              <p className="text-sm tracking-wide">Añadí prendas para armar tu outfit</p>
             </div>
           )}
 
@@ -282,7 +292,7 @@ export default function OutfitBuilder() {
                 onMouseDown={(e) => handleMouseDown(e, item.clothingId, "move")}
               >
                 <img
-                  src={item.clothingItem.imageDataUrl}
+                  src={item.clothingItem.imageUrl}
                   alt={item.clothingItem.name}
                   className="w-full h-full object-cover pointer-events-none"
                   draggable={false}
@@ -314,22 +324,35 @@ export default function OutfitBuilder() {
         </div>
       </div>
 
+      {showMannequin && (
+        <MannequinView
+          items={canvasItems.map((ci) => ({
+            clothingId: ci.clothingId,
+            category: ci.clothingItem.category,
+            imageUrl: ci.clothingItem.imageUrl,
+            name: ci.clothingItem.name,
+          }))}
+          outfitName={outfitName}
+          onClose={() => setShowMannequin(false)}
+        />
+      )}
+
       {/* Clothing picker panel */}
       {showClothingPanel && (
         <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[70vh] flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-stone-100">
-              <h3 className="font-semibold text-stone-800">Elegí una prenda</h3>
+          <div className="bg-white shadow-2xl w-full max-w-md max-h-[70vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-[#EDE8DF]">
+              <h3 className="font-display text-xl text-[#111]">ELEGÍ UNA PRENDA</h3>
               <button
                 onClick={() => setShowClothingPanel(false)}
-                className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400"
+                className="p-1.5 text-[#9B9390] hover:text-[#111] transition-colors"
               >
                 <X size={16} />
               </button>
             </div>
             <div className="overflow-y-auto p-4 grid grid-cols-3 gap-3 scrollbar-hide">
               {clothing.length === 0 ? (
-                <div className="col-span-3 text-center py-8 text-stone-400 text-sm">
+                <div className="col-span-3 text-center py-8 text-[#9B9390] text-sm">
                   No tenés prendas en el guardarropa todavía
                 </div>
               ) : (
@@ -339,16 +362,16 @@ export default function OutfitBuilder() {
                     <button
                       key={item.id}
                       onClick={() => addToCanvas(item)}
-                      className="flex flex-col items-center gap-1.5 p-2 rounded-xl hover:bg-stone-50 border border-stone-100 hover:border-stone-300 transition-all text-left"
+                      className="flex flex-col items-center gap-1.5 p-2 hover:bg-[#F5F0E8] border border-[#EDE8DF] hover:border-[#C8C0B0] transition-all text-left"
                     >
-                      <div className="w-full aspect-square bg-stone-50 rounded-lg overflow-hidden">
+                      <div className="w-full aspect-square bg-[#F5F0E8] overflow-hidden">
                         <img
-                          src={item.imageDataUrl}
+                          src={item.imageUrl}
                           alt={item.name}
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-contain"
                         />
                       </div>
-                      <span className="text-xs text-stone-600 truncate w-full text-center">
+                      <span className="text-xs text-[#6B6560] truncate w-full text-center">
                         {item.name}
                       </span>
                     </button>

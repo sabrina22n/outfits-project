@@ -6,19 +6,20 @@ import {
   Trash2,
   CalendarDays,
   ChevronDown,
-  GripVertical,
   X,
 } from "lucide-react";
-import {
-  Outfit,
-  TravelDay,
-  getAllOutfits,
-  getAllDays,
-  saveDay,
-  deleteDay,
-  getAllClothing,
-  ClothingItem,
-} from "@/lib/db";
+import type { Outfit, TravelDay, ClothingItem } from "@/lib/db";
+import { upsertDay, removeDay } from "@/app/actions/planner";
+
+async function fetchOutfits(): Promise<Outfit[]> {
+  return fetch("/api/outfits").then((r) => r.json());
+}
+async function fetchDays(): Promise<TravelDay[]> {
+  return fetch("/api/days").then((r) => r.json());
+}
+async function fetchClothing(): Promise<ClothingItem[]> {
+  return fetch("/api/clothing").then((r) => r.json());
+}
 
 function OutfitPreview({
   outfit,
@@ -38,18 +39,18 @@ function OutfitPreview({
         return (
           <div
             key={i}
-            className="w-12 h-12 rounded-lg overflow-hidden bg-stone-100 flex-shrink-0"
+            className="w-12 h-12 overflow-hidden bg-[#F5F0E8] flex-shrink-0"
           >
             <img
-              src={ci.imageDataUrl}
+              src={ci.imageUrl}
               alt={ci.name}
-              className="w-full h-full object-cover"
+              className="w-full h-full object-contain"
             />
           </div>
         );
       })}
       {outfit.items.length > 4 && (
-        <div className="w-12 h-12 rounded-lg bg-stone-100 flex items-center justify-center flex-shrink-0 text-xs text-stone-400 font-medium">
+        <div className="w-12 h-12 bg-[#F5F0E8] flex items-center justify-center flex-shrink-0 text-xs text-[#9B9390] font-medium">
           +{outfit.items.length - 4}
         </div>
       )}
@@ -66,7 +67,7 @@ export default function TravelPlanner() {
   const [editingDayId, setEditingDayId] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([getAllDays(), getAllOutfits(), getAllClothing()]).then(
+    Promise.all([fetchDays(), fetchOutfits(), fetchClothing()]).then(
       ([d, o, c]) => {
         setDays(d);
         setOutfits(o);
@@ -81,38 +82,34 @@ export default function TravelPlanner() {
       label: `Día ${days.length + 1}`,
       order: days.length,
     };
-    await saveDay(newDay);
-    setDays(await getAllDays());
+    await upsertDay(newDay);
+    setDays(await fetchDays());
   };
 
-  const removeDay = async (id: string) => {
-    await deleteDay(id);
-    setDays(await getAllDays());
+  const handleDeleteDay = async (id: string) => {
+    await removeDay(id);
+    setDays(await fetchDays());
   };
 
   const updateDayLabel = async (id: string, label: string) => {
     const day = days.find((d) => d.id === id);
     if (!day) return;
-    await saveDay({ ...day, label });
-    setDays((prev) =>
-      prev.map((d) => (d.id === id ? { ...d, label } : d))
-    );
+    await upsertDay({ ...day, label });
+    setDays((prev) => prev.map((d) => (d.id === id ? { ...d, label } : d)));
   };
 
   const updateDayDate = async (id: string, date: string) => {
     const day = days.find((d) => d.id === id);
     if (!day) return;
-    await saveDay({ ...day, date });
-    setDays((prev) =>
-      prev.map((d) => (d.id === id ? { ...d, date } : d))
-    );
+    await upsertDay({ ...day, date });
+    setDays((prev) => prev.map((d) => (d.id === id ? { ...d, date } : d)));
   };
 
   const assignOutfit = async (dayId: string, outfitId: string | undefined) => {
     const day = days.find((d) => d.id === dayId);
     if (!day) return;
     const updated = { ...day, outfitId };
-    await saveDay(updated);
+    await upsertDay(updated);
     setDays((prev) => prev.map((d) => (d.id === dayId ? updated : d)));
     setShowOutfitPicker(null);
   };
@@ -120,38 +117,42 @@ export default function TravelPlanner() {
   const outfitMap = Object.fromEntries(outfits.map((o) => [o.id, o]));
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-end justify-between">
         <div>
-          <input
-            type="text"
-            value={tripName}
-            onChange={(e) => setTripName(e.target.value)}
-            className="text-xl font-semibold text-stone-800 bg-transparent focus:outline-none border-b-2 border-transparent focus:border-stone-300"
-          />
-          <p className="text-sm text-stone-500 mt-0.5">
+          <h2 className="font-display text-5xl text-[#111]">PLANIFICADOR</h2>
+          <p className="text-sm text-[#9B9390] mt-1">
             {days.length} día{days.length !== 1 ? "s" : ""} planificado
             {days.length !== 1 ? "s" : ""}
           </p>
         </div>
-        <button
-          onClick={addDay}
-          className="flex items-center gap-2 px-4 py-2 bg-stone-800 text-white rounded-xl text-sm font-medium hover:bg-stone-700 transition-colors"
-        >
-          <Plus size={15} />
-          Agregar día
-        </button>
+        <div className="flex items-center gap-3">
+          <input
+            type="text"
+            value={tripName}
+            onChange={(e) => setTripName(e.target.value)}
+            className="border border-[#D4CEC6] px-3 py-2 text-sm focus:outline-none focus:border-[#111] bg-white"
+            placeholder="Nombre del viaje"
+          />
+          <button
+            onClick={addDay}
+            className="flex items-center gap-2 px-5 py-2.5 bg-[#111] text-white text-xs font-medium tracking-widest uppercase hover:bg-[#333] transition-colors"
+          >
+            <Plus size={13} />
+            Agregar día
+          </button>
+        </div>
       </div>
 
       {/* Empty state */}
       {days.length === 0 && (
         <div
           onClick={addDay}
-          className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-stone-200 rounded-2xl cursor-pointer hover:border-stone-400 hover:bg-stone-50 transition-all"
+          className="flex flex-col items-center justify-center py-24 border-2 border-dashed border-[#C8C0B0] cursor-pointer hover:border-[#111] hover:bg-white/30 transition-all"
         >
-          <CalendarDays size={36} className="text-stone-300 mb-3" />
-          <p className="text-stone-400 text-sm">
+          <CalendarDays size={28} className="text-[#C8C0B0] mb-3" />
+          <p className="text-[#9B9390] text-sm tracking-wide">
             Agregá días para planificar tu viaje
           </p>
         </div>
@@ -165,11 +166,11 @@ export default function TravelPlanner() {
           return (
             <div
               key={day.id}
-              className="bg-white rounded-2xl border border-stone-100 p-4 hover:shadow-sm transition-shadow"
+              className="bg-white border border-[#D4CEC6] p-4 hover:shadow-sm transition-shadow"
             >
               <div className="flex items-start gap-4">
                 {/* Day number */}
-                <div className="flex-shrink-0 w-9 h-9 bg-stone-800 text-white rounded-xl flex items-center justify-center text-sm font-bold">
+                <div className="flex-shrink-0 w-9 h-9 bg-[#111] text-white flex items-center justify-center text-sm font-bold">
                   {index + 1}
                 </div>
 
@@ -183,11 +184,11 @@ export default function TravelPlanner() {
                         autoFocus
                         onChange={(e) => updateDayLabel(day.id, e.target.value)}
                         onBlur={() => setEditingDayId(null)}
-                        className="font-medium text-stone-800 bg-transparent border-b border-stone-300 focus:outline-none text-sm"
+                        className="font-medium text-[#111] bg-transparent border-b border-[#C8C0B0] focus:outline-none text-sm"
                       />
                     ) : (
                       <span
-                        className="font-medium text-stone-800 cursor-text hover:text-stone-600 text-sm"
+                        className="font-medium text-[#111] cursor-text hover:text-[#6B6560] text-sm"
                         onClick={() => setEditingDayId(day.id)}
                       >
                         {day.label}
@@ -197,7 +198,7 @@ export default function TravelPlanner() {
                       type="date"
                       value={day.date ?? ""}
                       onChange={(e) => updateDayDate(day.id, e.target.value)}
-                      className="text-xs text-stone-400 bg-transparent border border-stone-200 rounded-lg px-2 py-1 focus:outline-none focus:border-stone-400"
+                      className="text-xs text-[#9B9390] bg-transparent border border-[#D4CEC6] px-2 py-1 focus:outline-none focus:border-[#111]"
                     />
                   </div>
 
@@ -206,24 +207,24 @@ export default function TravelPlanner() {
                     <div className="flex items-center gap-3">
                       <OutfitPreview outfit={assignedOutfit} clothing={clothing} />
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-stone-700 truncate">
+                        <p className="text-sm font-medium text-[#111] truncate">
                           {assignedOutfit.name}
                         </p>
-                        <p className="text-xs text-stone-400">
+                        <p className="text-xs text-[#9B9390]">
                           {assignedOutfit.items.length} prenda
                           {assignedOutfit.items.length !== 1 ? "s" : ""}
                         </p>
                       </div>
                       <button
                         onClick={() => setShowOutfitPicker(day.id)}
-                        className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-stone-600 transition-colors"
+                        className="p-1.5 text-[#9B9390] hover:text-[#111] transition-colors"
                         title="Cambiar outfit"
                       >
                         <ChevronDown size={14} />
                       </button>
                       <button
                         onClick={() => assignOutfit(day.id, undefined)}
-                        className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400 hover:text-red-500 transition-colors"
+                        className="p-1.5 text-[#9B9390] hover:text-red-500 transition-colors"
                         title="Quitar outfit"
                       >
                         <X size={14} />
@@ -232,7 +233,7 @@ export default function TravelPlanner() {
                   ) : (
                     <button
                       onClick={() => setShowOutfitPicker(day.id)}
-                      className="flex items-center gap-2 px-3 py-2 rounded-xl border-2 border-dashed border-stone-200 text-xs text-stone-400 hover:border-stone-400 hover:text-stone-600 transition-colors w-fit"
+                      className="flex items-center gap-2 px-3 py-2 border-2 border-dashed border-[#C8C0B0] text-xs text-[#9B9390] hover:border-[#111] hover:text-[#111] transition-colors w-fit"
                     >
                       <Plus size={13} />
                       Asignar outfit
@@ -242,8 +243,8 @@ export default function TravelPlanner() {
 
                 {/* Delete day */}
                 <button
-                  onClick={() => removeDay(day.id)}
-                  className="p-1.5 rounded-lg hover:bg-red-50 text-stone-300 hover:text-red-400 transition-colors flex-shrink-0"
+                  onClick={() => handleDeleteDay(day.id)}
+                  className="p-1.5 text-[#C8C0B0] hover:text-red-400 transition-colors flex-shrink-0"
                 >
                   <Trash2 size={14} />
                 </button>
@@ -256,19 +257,19 @@ export default function TravelPlanner() {
       {/* Outfit picker modal */}
       {showOutfitPicker && (
         <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[70vh] flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-stone-100">
-              <h3 className="font-semibold text-stone-800">Elegí un outfit</h3>
+          <div className="bg-white shadow-2xl w-full max-w-md max-h-[70vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-[#EDE8DF]">
+              <h3 className="font-display text-xl text-[#111]">ELEGÍ UN OUTFIT</h3>
               <button
                 onClick={() => setShowOutfitPicker(null)}
-                className="p-1.5 rounded-lg hover:bg-stone-100 text-stone-400"
+                className="p-1.5 text-[#9B9390] hover:text-[#111] transition-colors"
               >
                 <X size={16} />
               </button>
             </div>
             <div className="overflow-y-auto p-4 space-y-2 scrollbar-hide">
               {outfits.length === 0 ? (
-                <div className="text-center py-8 text-stone-400 text-sm">
+                <div className="text-center py-8 text-[#9B9390] text-sm">
                   No tenés outfits guardados todavía
                 </div>
               ) : (
@@ -276,14 +277,14 @@ export default function TravelPlanner() {
                   <button
                     key={outfit.id}
                     onClick={() => assignOutfit(showOutfitPicker, outfit.id)}
-                    className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-stone-50 border border-stone-100 hover:border-stone-300 transition-all text-left"
+                    className="w-full flex items-center gap-3 p-3 hover:bg-[#F5F0E8] border border-[#EDE8DF] hover:border-[#C8C0B0] transition-all text-left"
                   >
                     <OutfitPreview outfit={outfit} clothing={clothing} />
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-stone-700 truncate">
+                      <p className="text-sm font-medium text-[#111] truncate">
                         {outfit.name}
                       </p>
-                      <p className="text-xs text-stone-400">
+                      <p className="text-xs text-[#9B9390]">
                         {outfit.items.length} prenda
                         {outfit.items.length !== 1 ? "s" : ""}
                       </p>
