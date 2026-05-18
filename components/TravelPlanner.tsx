@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { Outfit, Trip, TravelDay, ClothingItem } from "@/lib/db";
 import { upsertTrip, removeTrip, upsertDay, removeDay } from "@/app/actions/planner";
+import ClothingItemModal from "@/components/ClothingItemModal";
 
 async function fetchTrips(): Promise<Trip[]> {
   return fetch("/api/trips").then((r) => r.json());
@@ -30,12 +31,16 @@ async function fetchClothing(): Promise<ClothingItem[]> {
 function OutfitPreview({
   outfit,
   clothing,
+  onItemClick,
+  maxItems = 4,
 }: {
   outfit: Outfit;
   clothing: ClothingItem[];
+  onItemClick?: (item: ClothingItem) => void;
+  maxItems?: number;
 }) {
   const clothingMap = Object.fromEntries(clothing.map((c) => [c.id, c]));
-  const previewItems = outfit.items.slice(0, 4);
+  const previewItems = outfit.items.slice(0, maxItems);
 
   return (
     <div className="flex gap-1.5">
@@ -43,21 +48,23 @@ function OutfitPreview({
         const ci = clothingMap[item.clothingId];
         if (!ci) return null;
         return (
-          <div
+          <button
             key={i}
-            className="w-12 h-12 overflow-hidden bg-[#F5F0E8] flex-shrink-0"
+            onClick={(e) => { e.stopPropagation(); onItemClick?.(ci); }}
+            className="w-8 h-8 sm:w-12 sm:h-12 overflow-hidden bg-[#F5F0E8] flex-shrink-0 hover:ring-2 hover:ring-[#111] transition-all"
+            title={ci.name}
           >
             <img
               src={ci.imageUrl}
               alt={ci.name}
               className="w-full h-full object-contain"
             />
-          </div>
+          </button>
         );
       })}
-      {outfit.items.length > 4 && (
-        <div className="w-12 h-12 bg-[#F5F0E8] flex items-center justify-center flex-shrink-0 text-xs text-[#9B9390] font-medium">
-          +{outfit.items.length - 4}
+      {outfit.items.length > maxItems && (
+        <div className="w-8 h-8 sm:w-12 sm:h-12 bg-[#F5F0E8] flex items-center justify-center flex-shrink-0 text-xs text-[#9B9390] font-medium">
+          +{outfit.items.length - maxItems}
         </div>
       )}
     </div>
@@ -71,6 +78,7 @@ export default function TravelPlanner() {
   const [clothing, setClothing] = useState<ClothingItem[]>([]);
   const [expandedTrips, setExpandedTrips] = useState<Set<string>>(new Set());
   const [showOutfitPicker, setShowOutfitPicker] = useState<{ dayId: string; slot: "day" | "night" } | null>(null);
+  const [selectedClothing, setSelectedClothing] = useState<ClothingItem | null>(null);
   const [editingDayId, setEditingDayId] = useState<string | null>(null);
   const [editingTripId, setEditingTripId] = useState<string | null>(null);
   const [newTripName, setNewTripName] = useState("");
@@ -174,15 +182,15 @@ export default function TravelPlanner() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-end gap-3 justify-between">
         <div>
-          <h2 className="font-display text-5xl text-[#111]">PLANIFICADOR</h2>
+          <h2 className="font-display text-3xl sm:text-5xl text-[#111]">PLANIFICADOR</h2>
           <p className="text-sm text-[#9B9390] mt-1">
             {trips.length} viaje{trips.length !== 1 ? "s" : ""} · {totalDays} día
             {totalDays !== 1 ? "s" : ""} planificado{totalDays !== 1 ? "s" : ""}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           {showNewTripInput ? (
             <>
               <input
@@ -197,7 +205,7 @@ export default function TravelPlanner() {
                     setNewTripName("");
                   }
                 }}
-                className="border border-[#D4CEC6] px-3 py-2 text-sm focus:outline-none focus:border-[#111] bg-white"
+                className="flex-1 min-w-[160px] border border-[#D4CEC6] px-3 py-2 text-sm focus:outline-none focus:border-[#111] bg-white"
                 placeholder="Nombre del viaje"
               />
               <button
@@ -354,43 +362,87 @@ export default function TravelPlanner() {
                             {/* Outfit slots */}
                             {(["day", "night"] as const).map((slot) => {
                               const assigned = slot === "day" ? outfitDay : outfitNight;
-                              const label = slot === "day" ? "☀️ Día" : "🌙 Noche";
+                              const slotLabel = slot === "day" ? "☀️ Día" : "🌙 Noche";
+                              const countText = assigned
+                                ? `${assigned.items.length} prenda${assigned.items.length !== 1 ? "s" : ""}`
+                                : null;
+
                               return (
-                                <div key={slot} className="flex items-center gap-3">
-                                  <span className="text-xs text-[#9B9390] w-14 flex-shrink-0">{label}</span>
-                                  {assigned ? (
-                                    <>
-                                      <OutfitPreview outfit={assigned} clothing={clothing} />
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium text-[#111] truncate">{assigned.name}</p>
-                                        <p className="text-xs text-[#9B9390]">
-                                          {assigned.items.length} prenda{assigned.items.length !== 1 ? "s" : ""}
-                                        </p>
+                                <div key={slot}>
+                                  {/* Mobile layout */}
+                                  <div className="sm:hidden space-y-1.5">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-[#9B9390] w-14 flex-shrink-0">{slotLabel}</span>
+                                      {assigned ? (
+                                        <>
+                                          <span className="text-xs text-[#9B9390] flex-1">{countText}</span>
+                                          <button
+                                            onClick={() => setShowOutfitPicker({ dayId: day.id, slot })}
+                                            className="p-1.5 text-[#9B9390] hover:text-[#111] transition-colors"
+                                            title="Cambiar outfit"
+                                          >
+                                            <ChevronDown size={14} />
+                                          </button>
+                                          <button
+                                            onClick={() => assignOutfit(day.id, slot, undefined)}
+                                            className="p-1.5 text-[#9B9390] hover:text-red-500 transition-colors"
+                                            title="Quitar outfit"
+                                          >
+                                            <X size={14} />
+                                          </button>
+                                        </>
+                                      ) : (
+                                        <button
+                                          onClick={() => setShowOutfitPicker({ dayId: day.id, slot })}
+                                          className="flex items-center gap-2 px-3 py-2 border-2 border-dashed border-[#C8C0B0] text-xs text-[#9B9390] hover:border-[#111] hover:text-[#111] transition-colors"
+                                        >
+                                          <Plus size={13} />
+                                          Asignar outfit
+                                        </button>
+                                      )}
+                                    </div>
+                                    {assigned && (
+                                      <div className="pl-[3.5rem]">
+                                        <OutfitPreview outfit={assigned} clothing={clothing} onItemClick={setSelectedClothing} maxItems={3} />
                                       </div>
+                                    )}
+                                  </div>
+
+                                  {/* Desktop layout */}
+                                  <div className="hidden sm:flex sm:items-center sm:gap-3">
+                                    <span className="text-xs text-[#9B9390] w-14 flex-shrink-0">{slotLabel}</span>
+                                    {assigned ? (
+                                      <>
+                                        <OutfitPreview outfit={assigned} clothing={clothing} onItemClick={setSelectedClothing} />
+                                        <div className="flex-1 min-w-0">
+                                          <p className="text-sm font-medium text-[#111] truncate">{assigned.name}</p>
+                                          <p className="text-xs text-[#9B9390]">{countText}</p>
+                                        </div>
+                                        <button
+                                          onClick={() => setShowOutfitPicker({ dayId: day.id, slot })}
+                                          className="p-1.5 text-[#9B9390] hover:text-[#111] transition-colors"
+                                          title="Cambiar outfit"
+                                        >
+                                          <ChevronDown size={14} />
+                                        </button>
+                                        <button
+                                          onClick={() => assignOutfit(day.id, slot, undefined)}
+                                          className="p-1.5 text-[#9B9390] hover:text-red-500 transition-colors"
+                                          title="Quitar outfit"
+                                        >
+                                          <X size={14} />
+                                        </button>
+                                      </>
+                                    ) : (
                                       <button
                                         onClick={() => setShowOutfitPicker({ dayId: day.id, slot })}
-                                        className="p-1.5 text-[#9B9390] hover:text-[#111] transition-colors"
-                                        title="Cambiar outfit"
+                                        className="flex items-center gap-2 px-3 py-2 border-2 border-dashed border-[#C8C0B0] text-xs text-[#9B9390] hover:border-[#111] hover:text-[#111] transition-colors"
                                       >
-                                        <ChevronDown size={14} />
+                                        <Plus size={13} />
+                                        Asignar outfit
                                       </button>
-                                      <button
-                                        onClick={() => assignOutfit(day.id, slot, undefined)}
-                                        className="p-1.5 text-[#9B9390] hover:text-red-500 transition-colors"
-                                        title="Quitar outfit"
-                                      >
-                                        <X size={14} />
-                                      </button>
-                                    </>
-                                  ) : (
-                                    <button
-                                      onClick={() => setShowOutfitPicker({ dayId: day.id, slot })}
-                                      className="flex items-center gap-2 px-3 py-2 border-2 border-dashed border-[#C8C0B0] text-xs text-[#9B9390] hover:border-[#111] hover:text-[#111] transition-colors"
-                                    >
-                                      <Plus size={13} />
-                                      Asignar outfit
-                                    </button>
-                                  )}
+                                    )}
+                                  </div>
                                 </div>
                               );
                             })}
@@ -422,6 +474,18 @@ export default function TravelPlanner() {
           );
         })}
       </div>
+
+      {/* Clothing item edit modal */}
+      {selectedClothing && (
+        <ClothingItemModal
+          item={selectedClothing}
+          onClose={() => setSelectedClothing(null)}
+          onSave={(updated) => {
+            setClothing((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+            setSelectedClothing(null);
+          }}
+        />
+      )}
 
       {/* Outfit picker modal */}
       {showOutfitPicker && (

@@ -72,8 +72,7 @@ export default function MannequinView({ items, outfitName, onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className="bg-white shadow-2xl flex flex-col"
-        style={{ width: 480, maxHeight: "90vh" }}
+        className="bg-white shadow-2xl flex flex-col w-full max-w-[480px] max-h-[90dvh]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

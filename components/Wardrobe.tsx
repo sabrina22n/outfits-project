@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { Upload, Trash2, ChevronDown, Loader2 } from "lucide-react";
 import type { ClothingItem, ClothingCategory } from "@/lib/db";
 import { addClothing, removeClothing } from "@/app/actions/clothing";
+import ClothingItemModal from "@/components/ClothingItemModal";
 
 const CATEGORIES: { value: ClothingCategory; label: string }[] = [
   { value: "top", label: "Tops" },
@@ -28,6 +29,7 @@ export default function Wardrobe() {
   const [uploading, setUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
   const [showForm, setShowForm] = useState(false);
+  const [selectedClothing, setSelectedClothing] = useState<ClothingItem | null>(null);
   const [newName, setNewName] = useState("");
   const [newCategory, setNewCategory] = useState<ClothingCategory>("top");
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -93,9 +95,9 @@ export default function Wardrobe() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-end justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-end gap-3 justify-between">
         <div>
-          <h2 className="font-display text-5xl text-[#111]">GUARDARROPA</h2>
+          <h2 className="font-display text-3xl sm:text-5xl text-[#111]">GUARDARROPA</h2>
           <p className="text-sm text-[#9B9390] mt-1">
             {items.length} prenda{items.length !== 1 ? "s" : ""} guardada
             {items.length !== 1 ? "s" : ""}
@@ -103,7 +105,7 @@ export default function Wardrobe() {
         </div>
         <button
           onClick={() => fileRef.current?.click()}
-          className="flex items-center gap-2 px-5 py-2.5 bg-[#111] text-white text-xs font-medium tracking-widest uppercase hover:bg-[#333] transition-colors"
+          className="flex items-center gap-2 px-5 py-2.5 bg-[#111] text-white text-xs font-medium tracking-widest uppercase hover:bg-[#333] transition-colors self-start sm:self-auto"
         >
           <Upload size={13} />
           Subir prenda
@@ -232,10 +234,11 @@ export default function Wardrobe() {
             {filtered.map((item) => (
               <div
                 key={item.id}
-                className="group relative bg-white overflow-hidden hover:shadow-md transition-all"
+                onClick={() => setSelectedClothing(item)}
+                className="group relative bg-white overflow-hidden hover:shadow-md transition-all cursor-pointer"
               >
                 <button
-                  onClick={() => handleDelete(item.id)}
+                  onClick={(e) => { e.stopPropagation(); handleDelete(item.id); }}
                   className="absolute top-2 right-2 z-10 p-1.5 bg-white/90 opacity-0 group-hover:opacity-100 transition-opacity text-[#9B9390] hover:text-red-500"
                 >
                   <Trash2 size={12} />
@@ -260,6 +263,17 @@ export default function Wardrobe() {
             ))}
           </div>
         </div>
+      )}
+
+      {selectedClothing && (
+        <ClothingItemModal
+          item={selectedClothing}
+          onClose={() => setSelectedClothing(null)}
+          onSave={(updated) => {
+            setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+            setSelectedClothing(null);
+          }}
+        />
       )}
     </div>
   );

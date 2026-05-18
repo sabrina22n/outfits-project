@@ -29,6 +29,10 @@ export async function addClothing(formData: FormData) {
   });
 }
 
+export async function updateClothing(id: string, name: string, category: string) {
+  await supabase.from("clothing").update({ name, category }).eq("id", id);
+}
+
 export async function removeClothing(id: string) {
   const { data } = await supabase
     .from("clothing")
