@@ -12,9 +12,11 @@ export async function GET() {
 
   const days: TravelDay[] = (data ?? []).map((row) => ({
     id: row.id,
+    tripId: row.trip_id,
     label: row.label,
     date: row.date ?? undefined,
-    outfitId: row.outfit_id ?? undefined,
+    outfitDayId: row.outfit_id ?? undefined,
+    outfitNightId: row.outfit_night_id ?? undefined,
     order: row.order_index,
   }));
 

@@ -33,10 +33,18 @@ export interface Outfit {
   createdAt: number;
 }
 
+export interface Trip {
+  id: string;
+  name: string;
+  createdAt: number;
+}
+
 export interface TravelDay {
   id: string;
+  tripId: string;
   label: string;
   date?: string;
-  outfitId?: string;
+  outfitDayId?: string;
+  outfitNightId?: string;
   order: number;
 }

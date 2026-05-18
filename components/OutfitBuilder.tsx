@@ -198,9 +198,37 @@ export default function OutfitBuilder() {
                 <p className="text-xs font-medium text-[#111] truncate pr-5">
                   {o.name}
                 </p>
-                <p className="text-xs text-[#9B9390]">
+                <p className="text-xs text-[#9B9390] mb-1.5">
                   {o.items.length} prenda{o.items.length !== 1 ? "s" : ""}
                 </p>
+                {o.items.length > 0 && (
+                  <div className="flex -space-x-2">
+                    {o.items.slice(0, 4).map((item) => {
+                      const ci = clothing.find((c) => c.id === item.clothingId);
+                      if (!ci) return null;
+                      return (
+                        <div
+                          key={item.clothingId}
+                          className="w-8 h-8 rounded border-2 border-white bg-[#F5F0E8] overflow-hidden flex-shrink-0"
+                          title={ci.name}
+                        >
+                          <img
+                            src={ci.imageUrl}
+                            alt={ci.name}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      );
+                    })}
+                    {o.items.length > 4 && (
+                      <div className="w-8 h-8 rounded border-2 border-white bg-[#EDE8DF] flex items-center justify-center flex-shrink-0">
+                        <span className="text-[9px] text-[#6B6560] font-medium">
+                          +{o.items.length - 4}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
               <button
                 onClick={(e) => {
