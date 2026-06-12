@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Save, RotateCcw, Trash2, Plus, X, GripVertical, Eye } from "lucide-react";
+import { Save, RotateCcw, Trash2, Plus, X, Eye } from "lucide-react";
 import type { ClothingItem, Outfit, OutfitItem } from "@/lib/db";
 import { saveOutfit, removeOutfit } from "@/app/actions/outfits";
 import MannequinView from "./MannequinView";
@@ -17,14 +17,25 @@ interface CanvasItem extends OutfitItem {
   clothingItem: ClothingItem;
 }
 
+type ResizeHandle = "tl" | "tr" | "bl" | "br";
+
+const RESIZE_HANDLES: { handle: ResizeHandle; position: string; cursor: string }[] = [
+  { handle: "tl", position: "top-0 left-0 -translate-x-1/2 -translate-y-1/2", cursor: "cursor-nwse-resize" },
+  { handle: "tr", position: "top-0 right-0 translate-x-1/2 -translate-y-1/2", cursor: "cursor-nesw-resize" },
+  { handle: "bl", position: "bottom-0 left-0 -translate-x-1/2 translate-y-1/2", cursor: "cursor-nesw-resize" },
+  { handle: "br", position: "bottom-0 right-0 translate-x-1/2 translate-y-1/2", cursor: "cursor-nwse-resize" },
+];
+
 interface DragState {
   id: string;
   startX: number;
   startY: number;
   itemStartX: number;
   itemStartY: number;
+  itemStartWidth: number;
+  itemStartHeight: number;
   type: "move" | "resize";
-  resizeHandle?: string;
+  resizeHandle?: ResizeHandle;
 }
 
 export default function OutfitBuilder() {
@@ -37,6 +48,7 @@ export default function OutfitBuilder() {
   const [editingOutfitId, setEditingOutfitId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [showMannequin, setShowMannequin] = useState(false);
+  const [resizingId, setResizingId] = useState<string | null>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
 
@@ -74,12 +86,13 @@ export default function OutfitBuilder() {
   };
 
   const handleMouseDown = useCallback(
-    (e: React.MouseEvent, id: string, type: "move" | "resize", handle?: string) => {
+    (e: React.MouseEvent, id: string, type: "move" | "resize", handle?: ResizeHandle) => {
       e.preventDefault();
       e.stopPropagation();
       const item = canvasItems.find((i) => i.clothingId === id);
       if (!item) return;
       setSelectedId(id);
+      if (type === "resize") setResizingId(id);
       setCanvasItems((prev) =>
         prev.map((ci) =>
           ci.clothingId === id
@@ -93,6 +106,8 @@ export default function OutfitBuilder() {
         startY: e.clientY,
         itemStartX: item.x,
         itemStartY: item.y,
+        itemStartWidth: item.width,
+        itemStartHeight: item.height,
         type,
         resizeHandle: handle,
       };
@@ -101,12 +116,13 @@ export default function OutfitBuilder() {
   );
 
   const handleTouchStart = useCallback(
-    (e: React.TouchEvent, id: string, type: "move" | "resize", handle?: string) => {
+    (e: React.TouchEvent, id: string, type: "move" | "resize", handle?: ResizeHandle) => {
       e.stopPropagation();
       const touch = e.touches[0];
       const item = canvasItems.find((i) => i.clothingId === id);
       if (!item) return;
       setSelectedId(id);
+      if (type === "resize") setResizingId(id);
       setCanvasItems((prev) =>
         prev.map((ci) =>
           ci.clothingId === id
@@ -120,6 +136,8 @@ export default function OutfitBuilder() {
         startY: touch.clientY,
         itemStartX: item.x,
         itemStartY: item.y,
+        itemStartWidth: item.width,
+        itemStartHeight: item.height,
         type,
         resizeHandle: handle,
       };
@@ -128,33 +146,60 @@ export default function OutfitBuilder() {
   );
 
   useEffect(() => {
-    const applyDrag = (clientX: number, clientY: number) => {
+    const MIN_SIZE = 60;
+    const applyDrag = (clientX: number, clientY: number, precise: boolean) => {
       if (!dragRef.current) return;
-      const { id, startX, startY, itemStartX, itemStartY, type } = dragRef.current;
-      const dx = clientX - startX;
-      const dy = clientY - startY;
+      const {
+        id,
+        startX,
+        startY,
+        itemStartX,
+        itemStartY,
+        itemStartWidth,
+        itemStartHeight,
+        type,
+        resizeHandle,
+      } = dragRef.current;
+      const factor = precise ? 4 : 1;
+      const dx = (clientX - startX) / factor;
+      const dy = (clientY - startY) / factor;
       setCanvasItems((prev) =>
         prev.map((item) => {
           if (item.clothingId !== id) return item;
           if (type === "move") {
             return { ...item, x: itemStartX + dx, y: itemStartY + dy };
           }
-          return {
-            ...item,
-            width: Math.max(60, item.width + dx),
-            height: Math.max(60, item.height + dy),
-          };
+          const handle = resizeHandle ?? "br";
+          const growX = handle === "tr" || handle === "br" ? dx : -dx;
+          const growY = handle === "bl" || handle === "br" ? dy : -dy;
+          const width = Math.max(MIN_SIZE, itemStartWidth + growX);
+          const height = Math.max(MIN_SIZE, itemStartHeight + growY);
+          const x =
+            handle === "tl" || handle === "bl"
+              ? itemStartX + (itemStartWidth - width)
+              : itemStartX;
+          const y =
+            handle === "tl" || handle === "tr"
+              ? itemStartY + (itemStartHeight - height)
+              : itemStartY;
+          return { ...item, x, y, width, height };
         })
       );
     };
-    const handleMouseMove = (e: MouseEvent) => applyDrag(e.clientX, e.clientY);
-    const handleMouseUp = () => { dragRef.current = null; };
+    const handleMouseMove = (e: MouseEvent) => applyDrag(e.clientX, e.clientY, e.shiftKey);
+    const handleMouseUp = () => {
+      dragRef.current = null;
+      setResizingId(null);
+    };
     const handleTouchMove = (e: TouchEvent) => {
       if (!dragRef.current) return;
       e.preventDefault();
-      applyDrag(e.touches[0].clientX, e.touches[0].clientY);
+      applyDrag(e.touches[0].clientX, e.touches[0].clientY, e.shiftKey);
     };
-    const handleTouchEnd = () => { dragRef.current = null; };
+    const handleTouchEnd = () => {
+      dragRef.current = null;
+      setResizingId(null);
+    };
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseup", handleMouseUp);
     window.addEventListener("touchmove", handleTouchMove, { passive: false });
@@ -327,7 +372,8 @@ export default function OutfitBuilder() {
         <div
           ref={canvasRef}
           className="h-[65dvh] sm:h-auto sm:flex-1 bg-white border-2 border-dashed border-[#C8C0B0] overflow-auto"
-          onClick={() => setSelectedId(null)}
+          onMouseDown={() => setSelectedId(null)}
+          onTouchStart={() => setSelectedId(null)}
         >
           <div className="relative min-w-[500px] min-h-full">
             {canvasItems.length === 0 && (
@@ -351,42 +397,54 @@ export default function OutfitBuilder() {
                     width: item.width,
                     height: item.height,
                     zIndex: item.zIndex,
-                    borderRadius: 8,
-                    overflow: "hidden",
                     touchAction: "none",
                   }}
                   onMouseDown={(e) => handleMouseDown(e, item.clothingId, "move")}
                   onTouchStart={(e) => handleTouchStart(e, item.clothingId, "move")}
                 >
-                  <img
-                    src={item.clothingItem.imageUrl}
-                    alt={item.clothingItem.name}
-                    className="w-full h-full object-cover pointer-events-none"
-                    draggable={false}
-                  />
-                  {/* Delete button */}
-                  <button
-                    onMouseDown={(e) => e.stopPropagation()}
-                    onTouchStart={(e) => e.stopPropagation()}
-                    onClick={() => removeFromCanvas(item.clothingId)}
-                    className="absolute top-1 right-1 p-1 bg-white/90 rounded-full opacity-0 group-hover:opacity-100 transition-opacity text-stone-500 hover:text-red-500"
-                  >
-                    <X size={11} />
-                  </button>
-                  {/* Resize handle */}
-                  <div
-                    onMouseDown={(e) => handleMouseDown(e, item.clothingId, "resize", "br")}
-                    onTouchStart={(e) => handleTouchStart(e, item.clothingId, "resize", "br")}
-                    className="absolute bottom-1 right-1 cursor-se-resize text-white/80 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <GripVertical size={12} />
+                  <div className="w-full h-full overflow-hidden rounded-lg">
+                    <img
+                      src={item.clothingItem.imageUrl}
+                      alt={item.clothingItem.name}
+                      className="w-full h-full object-cover pointer-events-none"
+                      draggable={false}
+                    />
+                    {/* Delete button */}
+                    <button
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                      onClick={() => removeFromCanvas(item.clothingId)}
+                      className="absolute top-1 right-1 p-1 bg-white/90 rounded-full opacity-0 group-hover:opacity-100 transition-opacity text-stone-500 hover:text-red-500"
+                    >
+                      <X size={11} />
+                    </button>
+                    {/* Name label */}
+                    {isSelected && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] px-1.5 py-0.5 truncate">
+                        {item.clothingItem.name}
+                      </div>
+                    )}
                   </div>
-                  {/* Name label */}
-                  {isSelected && (
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/50 text-white text-[10px] px-1.5 py-0.5 truncate">
-                      {item.clothingItem.name}
+
+                  {/* Live size readout while resizing */}
+                  {resizingId === item.clothingId && (
+                    <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-stone-900 text-white text-[10px] px-2 py-0.5 rounded whitespace-nowrap pointer-events-none">
+                      {Math.round(item.width)} × {Math.round(item.height)}
                     </div>
                   )}
+
+                  {/* Resize handles (corners) — larger hit area for precise sizing */}
+                  {isSelected &&
+                    RESIZE_HANDLES.map(({ handle, position, cursor }) => (
+                      <div
+                        key={handle}
+                        onMouseDown={(e) => handleMouseDown(e, item.clothingId, "resize", handle)}
+                        onTouchStart={(e) => handleTouchStart(e, item.clothingId, "resize", handle)}
+                        className={`absolute z-10 w-5 h-5 flex items-center justify-center ${position} ${cursor}`}
+                      >
+                        <div className="w-3 h-3 bg-white border-2 border-stone-800 rounded-full" />
+                      </div>
+                    ))}
                 </div>
               );
             })}
